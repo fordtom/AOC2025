@@ -21,7 +21,7 @@ pub fn partOne(contents: []u8) !i32 {
             else => unreachable,
         }
 
-        loc = @rem(loc, 100);
+        loc = @mod(loc, 100);
 
         if (loc == 0) {
             incr += 1;
@@ -45,7 +45,7 @@ pub fn partTwo(contents: []u8) !i32 {
         const distance = try std.fmt.parseInt(i32, step[1..], 10);
         const rotations = @divTrunc(distance, 100);
         incr += rotations;
-        const rem = @rem(distance, 100);
+        const rem = @mod(distance, 100);
 
         switch (direction) {
             'L' => {
