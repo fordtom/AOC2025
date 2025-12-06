@@ -36,6 +36,8 @@
             go
             gopls
             uv
+            clang
+            libcxx
           ];
         };
       }
