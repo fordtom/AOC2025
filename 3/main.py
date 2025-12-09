@@ -29,9 +29,13 @@ def part_two(banks) -> int:
     return sum(joltages)
 
 
-with open("input.txt", "r") as file:
-    banks = file.read().splitlines()
+def main():
+    with open("input.txt", "r") as file:
+        banks = file.read().splitlines()
+
+    print(f"Solution for part 1: {part_one(banks)}")
+    print(f"Solution for part 2: {part_two(banks)}")
 
 
-print(f"Solution for part 1: {part_one(banks)}")
-print(f"Solution for part 2: {part_two(banks)}")
+if __name__ == "__main__":
+    main()
