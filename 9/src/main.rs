@@ -57,7 +57,7 @@ impl RedTile {
     pub fn ray_crosses_edge(&self, edge: &Edge) -> bool {
         let ray = Edge::Horizontal {
             x1: self.x,
-            x2: std::u64::MAX,
+            x2: u64::MAX,
             y: self.y,
         };
         ray.does_intersect_ray_logic(edge)
