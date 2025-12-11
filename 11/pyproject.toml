@@ -1,0 +1,7 @@
+[project]
+name = "day_eleven"
+version = "0.1.0"
+description = "Day 11 of the Advent of Code 2025"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
