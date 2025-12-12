@@ -30,7 +30,7 @@ def part_two(banks) -> int:
 
 
 def main():
-    with open("input.txt", "r") as file:
+    with open("3/input.txt", "r") as file:
         banks = file.read().splitlines()
 
     print(f"Solution for part 1: {part_one(banks)}")

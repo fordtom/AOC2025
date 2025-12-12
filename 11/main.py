@@ -52,7 +52,7 @@ def part_two(devices: dict[str, list[str]]) -> int:
 
 
 def main():
-    with open("input.txt", "r") as file:
+    with open("11/input.txt", "r") as file:
         lines = file.read().splitlines()
         devices = {
             name: [output.strip() for output in outputs.split(" ") if output.strip()]
