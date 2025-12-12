@@ -17,6 +17,98 @@ type Machine struct {
 	joltage_sum       int
 }
 
+// rational number for exact linear algebra
+type rat struct{ num, den int64 }
+
+func gcd(a, b int64) int64 {
+	if a < 0 {
+		a = -a
+	}
+	if b < 0 {
+		b = -b
+	}
+	for b != 0 {
+		a, b = b, a%b
+	}
+	if a == 0 {
+		return 1
+	}
+	return a
+}
+
+func newrat(num, den int64) rat {
+	if num == 0 {
+		return rat{0, 1}
+	}
+	if den < 0 {
+		num, den = -num, -den
+	}
+	g := gcd(num, den)
+	return rat{num / g, den / g}
+}
+
+func (r rat) sub(o rat) rat { return newrat(r.num*o.den-o.num*r.den, r.den*o.den) }
+func (r rat) mul(o rat) rat { return newrat(r.num*o.num, r.den*o.den) }
+func (r rat) div(o rat) rat { return newrat(r.num*o.den, r.den*o.num) }
+
+// gaussian elimination to reduced row echelon form
+// returns pivot column indices and whether system is consistent
+func rref(aug [][]rat, rows, cols int) ([]int, bool) {
+	pivot_row := 0
+	pivot_cols := []int{}
+
+	for col := 0; col < cols && pivot_row < rows; col++ {
+		// find pivot
+		pivot := -1
+		for r := pivot_row; r < rows; r++ {
+			if aug[r][col].num != 0 {
+				pivot = r
+				break
+			}
+		}
+		if pivot == -1 {
+			continue
+		}
+		aug[pivot_row], aug[pivot] = aug[pivot], aug[pivot_row]
+
+		// scale pivot row to 1
+		pv := aug[pivot_row][col]
+		for c := col; c <= cols; c++ {
+			aug[pivot_row][c] = aug[pivot_row][c].div(pv)
+		}
+
+		// eliminate column in other rows
+		for r := range rows {
+			if r == pivot_row || aug[r][col].num == 0 {
+				continue
+			}
+			factor := aug[r][col]
+			for c := col; c <= cols; c++ {
+				aug[r][c] = aug[r][c].sub(aug[pivot_row][c].mul(factor))
+			}
+		}
+
+		pivot_cols = append(pivot_cols, col)
+		pivot_row++
+	}
+
+	// check consistency: row of all zeros with nonzero RHS means no solution
+	for r := range rows {
+		all_zero := true
+		for c := range cols {
+			if aug[r][c].num != 0 {
+				all_zero = false
+				break
+			}
+		}
+		if all_zero && aug[r][cols].num != 0 {
+			return nil, false
+		}
+	}
+
+	return pivot_cols, true
+}
+
 func extractDesired(line string) (uint16, int) {
 	d_start := strings.IndexByte(line, '[')
 	d_end := strings.IndexByte(line, ']')
@@ -139,6 +231,124 @@ func (m Machine) MinTurnOn() int {
 	return min
 }
 
+func (m Machine) MinCorrectJoltages() int {
+	num_counters := len(m.desired_joltages)
+	num_buttons := len(m.button_increments)
+
+	// build augmented matrix [A|t] for system A*x = t
+	aug := make([][]rat, num_counters)
+	for i := 0; i < num_counters; i++ {
+		row := make([]rat, num_buttons+1)
+		for j := 0; j < num_buttons; j++ {
+			row[j] = newrat(int64(m.button_increments[j][i]), 1)
+		}
+		row[num_buttons] = newrat(int64(m.desired_joltages[i]), 1)
+		aug[i] = row
+	}
+
+	pivot_cols, ok := rref(aug, num_counters, num_buttons)
+	if !ok {
+		return math.MaxInt
+	}
+
+	// identify free variables (columns without pivots)
+	is_pivot := make([]bool, num_buttons)
+	for _, c := range pivot_cols {
+		is_pivot[c] = true
+	}
+	free_cols := []int{}
+	for c := 0; c < num_buttons; c++ {
+		if !is_pivot[c] {
+			free_cols = append(free_cols, c)
+		}
+	}
+
+	// upper bound: button can't be pressed more than smallest target it affects
+	upper_bound := func(btn int) int {
+		ub := math.MaxInt
+		for k := 0; k < num_counters; k++ {
+			if m.button_increments[btn][k] > 0 && m.desired_joltages[k] < ub {
+				ub = m.desired_joltages[k]
+			}
+		}
+		if ub == math.MaxInt {
+			return 0
+		}
+		return ub
+	}
+
+	// extract coefficients for free variables from RREF result
+	num_pivots := len(pivot_cols)
+	rhs := make([]rat, num_pivots)
+	coeff := make([][]rat, num_pivots)
+	for i := 0; i < num_pivots; i++ {
+		rhs[i] = aug[i][num_buttons]
+		coeff[i] = make([]rat, len(free_cols))
+		for f, col := range free_cols {
+			coeff[i][f] = aug[i][col]
+		}
+	}
+
+	best := math.MaxInt
+
+	// evaluate a candidate assignment of free variables
+	eval := func(free []int) {
+		total := 0
+		for _, v := range free {
+			total += v
+		}
+		if total >= best {
+			return
+		}
+
+		// compute pivot variables: x_pivot = rhs - sum(coeff * free)
+		for i := range num_pivots {
+			val := rhs[i]
+			for f := 0; f < len(free_cols); f++ {
+				if free[f] != 0 {
+					val = val.sub(newrat(coeff[i][f].num*int64(free[f]), coeff[i][f].den))
+				}
+			}
+			if val.den != 1 || val.num < 0 {
+				return // not a valid non-negative integer solution
+			}
+			total += int(val.num)
+			if total >= best {
+				return
+			}
+		}
+		best = total
+	}
+
+	// enumerate all non-negative integer values for free variables
+	switch len(free_cols) {
+	case 0:
+		eval(nil)
+	case 1:
+		for a := 0; a <= upper_bound(free_cols[0]); a++ {
+			eval([]int{a})
+		}
+	case 2:
+		for a := 0; a <= upper_bound(free_cols[0]); a++ {
+			for b := 0; b <= upper_bound(free_cols[1]); b++ {
+				eval([]int{a, b})
+			}
+		}
+	case 3:
+		for a := 0; a <= upper_bound(free_cols[0]); a++ {
+			for b := 0; b <= upper_bound(free_cols[1]); b++ {
+				for c := 0; c <= upper_bound(free_cols[2]); c++ {
+					eval([]int{a, b, c})
+				}
+			}
+		}
+	default:
+		panic(fmt.Sprintf("too many free variables: %d", len(free_cols)))
+	}
+
+	return best
+}
+
 func partOne(machines []Machine) int {
 	sum := 0
 
@@ -152,7 +362,9 @@ func partOne(machines []Machine) int {
 func partTwo(machines []Machine) int {
 	sum := 0
 
-	// to be implemented
+	for _, machine := range machines {
+		sum += machine.MinCorrectJoltages()
+	}
 
 	return sum
 }
